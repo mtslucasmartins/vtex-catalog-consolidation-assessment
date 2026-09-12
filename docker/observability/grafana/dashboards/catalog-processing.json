@@ -1,0 +1,190 @@
+{
+  "annotations": {"list": []},
+  "description": "Catalog ingestion, product processing, Kafka lag, and HTTP performance.",
+  "editable": true,
+  "graphTooltip": 2,
+  "panels": [
+    {
+      "type": "row",
+      "title": "Overview",
+      "description": "Current health and workload totals at a glance.",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Products Processed",
+      "description": "Exact first-time product entries processed since the current worker started.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(catalog_product_entries_processed_total) or vector(0)", "instant": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 1}
+    },
+    {
+      "type": "stat",
+      "title": "Current Topic Lag",
+      "description": "Messages waiting for the catalog-workers consumer group.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "clamp_min(sum(max by (redpanda_topic, redpanda_partition) (redpanda_kafka_max_offset{redpanda_topic=\"catalog.product-entry.update\"}) - on (redpanda_topic, redpanda_partition) max by (redpanda_topic, redpanda_partition) (redpanda_kafka_consumer_group_committed_offset{redpanda_group=\"catalog-workers\",redpanda_topic=\"catalog.product-entry.update\"})), 0)", "instant": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 1}
+    },
+    {
+      "type": "table",
+      "title": "Ingest Outbox Status",
+      "description": "Current pending and failed ingestion jobs in the outbox.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "catalog_product_ingest_outbox", "format": "table", "instant": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []},
+      "options": {"cellHeight": "sm", "showHeader": true},
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 1}
+    },
+    {
+      "type": "stat",
+      "title": "Worker Error Rate",
+      "description": "Percentage of worker-handled entries that ended with an error.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "100 * sum(rate(catalog_product_entry_handled_total{outcome=\"error\"}[$__rate_interval])) / clamp_min(sum(rate(catalog_product_entry_handled_total[$__rate_interval])), 0.000001)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 2}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 1}
+    },
+    {
+      "type": "row",
+      "title": "Product Processing",
+      "description": "Worker outcomes and end-to-end processing latency.",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 6}
+    },
+    {
+      "type": "table",
+      "title": "Product Status Distribution",
+      "description": "Exact processed totals by final status since the current worker started.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum by (status) (catalog_product_entries_processed_total)", "format": "table", "instant": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []},
+      "options": {"cellHeight": "sm", "showHeader": true},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 7}
+    },
+    {
+      "type": "timeseries",
+      "title": "Product Processing Latency",
+      "description": "Median and 95th-percentile duration for first-time product processing.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le) (rate(catalog_product_entry_processing_seconds_bucket{outcome=\"processed\"}[$__rate_interval])))", "legendFormat": "p50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(catalog_product_entry_processing_seconds_bucket{outcome=\"processed\"}[$__rate_interval])))", "legendFormat": "p95", "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s", "custom": {"drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true}}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean", "max"]}},
+      "gridPos": {"h": 8, "w": 16, "x": 8, "y": 7}
+    },
+    {
+      "type": "row",
+      "title": "Messaging",
+      "description": "Kafka publication, consumption, and backlog trends.",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 15}
+    },
+    {
+      "type": "timeseries",
+      "title": "Product Event Counts",
+      "description": "Exact counter changes between five-second Prometheus scrapes; the legend Total sums visible points.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "clamp_min(sum(idelta(catalog_product_entries_dispatched_total{outcome=\"successful\"}[$__rate_interval])), 0) or vector(0)", "interval": "5s", "legendFormat": "Dispatched", "refId": "A"},
+        {"expr": "clamp_min(sum(idelta(catalog_product_entry_handled_total{outcome=~\"processed|duplicate\"}[$__rate_interval])), 0) or vector(0)", "interval": "5s", "legendFormat": "Handled", "refId": "B"},
+        {"expr": "clamp_min(sum(idelta(catalog_product_entry_handled_total{outcome=\"error\"}[$__rate_interval])), 0) or vector(0)", "interval": "5s", "legendFormat": "Worker Errors", "refId": "C"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "custom": {"drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true}}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["sum", "max"]}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka Messages Waiting",
+      "description": "Point-in-time queue depth; a falling step means workers consumed messages and values are never summed.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "clamp_min(sum(max by (redpanda_topic, redpanda_partition) (redpanda_kafka_max_offset{redpanda_topic=\"catalog.product-entry.update\"}) - on (redpanda_topic, redpanda_partition) max by (redpanda_topic, redpanda_partition) (redpanda_kafka_consumer_group_committed_offset{redpanda_group=\"catalog-workers\",redpanda_topic=\"catalog.product-entry.update\"})), 0)", "legendFormat": "Messages", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "custom": {"drawStyle": "line", "lineInterpolation": "stepAfter", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true}}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean", "max"]}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+    },
+    {
+      "type": "row",
+      "title": "HTTP Endpoints",
+      "description": "Ingester API traffic, latency, and error trends.",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 24}
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Request Rate",
+      "description": "Requests per second grouped by HTTP method and route.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum by (method, uri) (rate(http_server_requests_seconds_count{job=\"ingester\",uri!~\"/actuator.*\"}[$__rate_interval])) or 0 * sum by (method, uri) (count_over_time(http_server_requests_seconds_count{job=\"ingester\",uri!~\"/actuator.*\"}[$__range]))", "legendFormat": "{{method}} {{uri}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true}}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean", "max"]}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 25}
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Endpoint Latency",
+      "description": "Median and 95th-percentile response time by HTTP method and route.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le, method, uri) (rate(http_server_requests_seconds_bucket{job=\"ingester\",uri!~\"/actuator.*\"}[$__rate_interval])))", "legendFormat": "p50 {{method}} {{uri}}", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le, method, uri) (rate(http_server_requests_seconds_bucket{job=\"ingester\",uri!~\"/actuator.*\"}[$__rate_interval])))", "legendFormat": "p95 {{method}} {{uri}}", "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s", "custom": {"drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true}}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean", "max"]}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 25}
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Error Rates",
+      "description": "Percentage of requests returning 4xx, 5xx, and combined error responses.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "100 * sum(rate(http_server_requests_seconds_count{job=\"ingester\",uri!~\"/actuator.*\",status=~\"4..\"}[$__rate_interval])) / clamp_min(sum(rate(http_server_requests_seconds_count{job=\"ingester\",uri!~\"/actuator.*\"}[$__rate_interval])), 0.000001) or vector(0)", "legendFormat": "4xx", "refId": "A"},
+        {"expr": "100 * sum(rate(http_server_requests_seconds_count{job=\"ingester\",uri!~\"/actuator.*\",status=~\"5..\"}[$__rate_interval])) / clamp_min(sum(rate(http_server_requests_seconds_count{job=\"ingester\",uri!~\"/actuator.*\"}[$__rate_interval])), 0.000001) or vector(0)", "legendFormat": "5xx", "refId": "B"},
+        {"expr": "100 * sum(rate(http_server_requests_seconds_count{job=\"ingester\",uri!~\"/actuator.*\",status=~\"[45]..\"}[$__rate_interval])) / clamp_min(sum(rate(http_server_requests_seconds_count{job=\"ingester\",uri!~\"/actuator.*\"}[$__rate_interval])), 0.000001) or vector(0)", "legendFormat": "Combined", "refId": "C"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "custom": {"drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true}}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean", "max"]}},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 33}
+    },
+    {
+      "type": "row",
+      "title": "Background Errors",
+      "description": "Failures outside the HTTP request path.",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 41}
+    },
+    {
+      "type": "timeseries",
+      "title": "Ingest And Dispatch Error Counts",
+      "description": "Exact failed-event counter changes between five-second Prometheus scrapes.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "clamp_min(sum(idelta(catalog_product_ingest_jobs_total{outcome=\"failed\"}[$__rate_interval])), 0) or vector(0)", "interval": "5s", "legendFormat": "Ingest Job Errors", "refId": "A"},
+        {"expr": "clamp_min(sum(idelta(catalog_product_entries_dispatched_total{outcome=\"failed\"}[$__rate_interval])), 0) or vector(0)", "interval": "5s", "legendFormat": "Kafka Dispatch Errors", "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "custom": {"drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true}}, "overrides": []},
+      "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["sum", "max"]}},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 42}
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 41,
+  "tags": ["catalog", "processing"],
+  "time": {"from": "now-15m", "to": "now"},
+  "timezone": "browser",
+  "title": "Catalog Processing",
+  "uid": "catalog-processing",
+  "version": 5
+}

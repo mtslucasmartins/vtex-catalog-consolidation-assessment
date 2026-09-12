@@ -1,0 +1,80 @@
+server:
+  port: ${SERVER_PORT:9090}
+
+spring:
+  application:
+    name: ms-catalog-consolidation-ingester
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/catalog}
+    username: ${DATABASE_USERNAME:catalog}
+    password: ${DATABASE_PASSWORD:catalog}
+  sql:
+    init:
+      mode: never
+  jpa:
+    hibernate:
+      ddl-auto: none
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+    consumer:
+      group-id: ms-catalog-consolidation-ingester
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    listener:
+      ack-mode: record
+  task:
+    scheduling:
+      pool:
+        size: 2
+
+ingester:
+  batch-size: ${BATCH_SIZE:1}
+  storage:
+    bucket: ${S3_BUCKET:catalog-ingestions}
+    region: ${AWS_REGION:us-east-1}
+    endpoint: ${S3_ENDPOINT:}
+  topics:
+    product-entry-update: catalog.product-entry.update
+  outbox:
+    ingest-relay-delay-ms: ${OUTBOX_INGEST_RELAY_DELAY_MS:100}
+    ingest-relay-batch-size: 10
+    max-attempts: ${OUTBOX_MAX_ATTEMPTS:5}
+    send-timeout-ms: 10000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      minimum-expected-value:
+        http.server.requests: 1ms
+      maximum-expected-value:
+        http.server.requests: 60s
+
+logging:
+  level:
+    com.vtex.catalog.ingester: INFO
+    org.apache.kafka: WARN

@@ -1,0 +1,160 @@
+name: catalog-consolidation
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: catalog
+      POSTGRES_USER: catalog
+      POSTGRES_PASSWORD: catalog
+    ports:
+      - "5433:5432"
+    volumes:
+      - catalog-postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/01-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./docker/postgres/02-catalog-seed.sql:/docker-entrypoint-initdb.d/02-catalog-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catalog -d catalog"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  localstack:
+    image: localstack/localstack:4.9.1
+    environment:
+      SERVICES: s3
+      S3_BUCKET: catalog-ingestions
+    ports:
+      - "4566:4566"
+    volumes:
+      - ./docker/localstack/init-s3.sh:/etc/localstack/init/ready.d/init-s3.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "awslocal s3api head-bucket --bucket catalog-ingestions"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redpanda:
+    image: redpandadata/redpanda:v24.3.11
+    command:
+      - redpanda start
+      - --smp 1
+      - --memory 512M
+      - --overprovisioned
+      - --node-id 0
+      - --mode dev-container
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+    ports:
+      - "19092:19092"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  ms-catalog-consolidation-ingester:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        SERVICE: ms-catalog-consolidation-ingester
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/catalog
+      DATABASE_USERNAME: catalog
+      DATABASE_PASSWORD: catalog
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      S3_BUCKET: catalog-ingestions
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      S3_ENDPOINT: http://localstack:4566
+    ports:
+      - "9090:9090"
+    depends_on:
+      localstack:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  ms-catalog-consolidation-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        SERVICE: ms-catalog-consolidation-worker
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/catalog
+      DATABASE_USERNAME: catalog
+      DATABASE_PASSWORD: catalog
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./docker/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - catalog-prometheus-data:/prometheus
+    depends_on:
+      - ms-catalog-consolidation-ingester
+      - ms-catalog-consolidation-worker
+      - redpanda
+
+  grafana:
+    image: grafana/grafana:13.2.1
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:11000/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./docker/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - catalog-grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "11000:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - grafana
+      - ms-catalog-consolidation-ingester
+      - ms-catalog-consolidation-worker
+
+volumes:
+  catalog-postgres-data:
+  catalog-prometheus-data:
+  catalog-grafana-data:

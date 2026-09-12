@@ -1,0 +1,11 @@
+**/target/
+*.log
+.cursor/
+.idea/
+.vscode/
+*.iml
+docker/.env
+
+# SQLite journal files (assessment catalog lives in docs/database/catalog.db)
+docs/database/*.db-wal
+docs/database/*.db-shm

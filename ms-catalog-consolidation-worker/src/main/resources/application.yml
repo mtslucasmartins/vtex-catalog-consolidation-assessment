@@ -1,0 +1,68 @@
+server:
+  port: ${SERVER_PORT:9091}
+
+spring:
+  application:
+    name: ms-catalog-consolidation-worker
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/catalog}
+    username: ${DATABASE_USERNAME:catalog}
+    password: ${DATABASE_PASSWORD:catalog}
+  sql:
+    init:
+      mode: never
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  jpa:
+    hibernate:
+      ddl-auto: none
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+    consumer:
+      group-id: catalog-workers
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: record
+
+worker:
+  topics:
+    product-entry-update: catalog.product-entry.update
+  lock:
+    product-entry-ttl-ms: 30000
+    acquire-retry-delay-ms: 100
+    acquire-max-attempts: 50
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        catalog.product.entry.processing: true
+      minimum-expected-value:
+        http.server.requests: 1ms
+        catalog.product.entry.processing: 1ms
+      maximum-expected-value:
+        http.server.requests: 60s
+        catalog.product.entry.processing: 60s
+
+logging:
+  level:
+    org.apache.kafka: WARN
