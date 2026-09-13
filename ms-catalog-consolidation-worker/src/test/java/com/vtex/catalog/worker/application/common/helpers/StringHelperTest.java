@@ -64,4 +64,10 @@ class StringHelperTest {
         assertFalse(StringHelper.isUuid(null));
         assertFalse(StringHelper.isUuid(" "));
     }
+
+    @Test
+    void givenSevenCharFirstSegment_whenIsUuid_thenReturnsFalse() {
+        // Java UUID.fromString zero-pads short groups; strict validation must reject this.
+        assertFalse(StringHelper.isUuid("ddddeee-ffff-4000-1111-222233334444"));
+    }
 }

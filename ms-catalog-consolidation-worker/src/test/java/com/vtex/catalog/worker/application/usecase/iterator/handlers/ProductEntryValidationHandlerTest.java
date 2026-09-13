@@ -42,6 +42,17 @@ class ProductEntryValidationHandlerTest {
     }
 
     @Test
+    void givenSevenCharUuidSegment_whenHandle_thenThrowsInvalidProductException() {
+        // Given — accepted by lenient UUID.fromString, must be rejected at validation
+        var handler = new ProductEntryValidationHandler(catalogGateway);
+        var context = ProductEntryContext.of(validProduct("ddddeee-ffff-4000-1111-222233334444"));
+
+        // When / Then
+        assertThrows(InvalidProductException.class, () -> handler.handle(context));
+        verify(catalogGateway, never()).existsSellerLink(any(), any());
+    }
+
+    @Test
     void givenValidUuidAndNoExistingLink_whenHandle_thenDelegatesToNext() {
         // Given
         var handler = new ProductEntryValidationHandler(catalogGateway);

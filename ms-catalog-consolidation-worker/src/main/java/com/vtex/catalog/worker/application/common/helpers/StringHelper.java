@@ -3,8 +3,12 @@ package com.vtex.catalog.worker.application.common.helpers;
 import java.text.Normalizer;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 public final class StringHelper {
+
+    private static final Pattern STRICT_UUID =
+            Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", Pattern.CASE_INSENSITIVE);
 
     private StringHelper() {
     }
@@ -34,8 +38,12 @@ public final class StringHelper {
         if (value == null || value.isBlank()) {
             return false;
         }
+        var trimmed = value.trim();
+        if (!STRICT_UUID.matcher(trimmed).matches()) {
+            return false;
+        }
         try {
-            UUID.fromString(value.trim());
+            UUID.fromString(trimmed);
             return true;
         } catch (IllegalArgumentException exception) {
             return false;
