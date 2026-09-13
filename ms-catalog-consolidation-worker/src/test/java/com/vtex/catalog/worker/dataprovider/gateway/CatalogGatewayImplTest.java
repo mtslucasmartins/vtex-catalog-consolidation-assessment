@@ -1,16 +1,18 @@
 package com.vtex.catalog.worker.dataprovider.gateway;
 
 import com.vtex.catalog.worker.application.domain.processing.ProductEntryPayload;
+import com.vtex.catalog.worker.dataprovider.mappers.CatalogProductPersistenceMapper;
+import com.vtex.catalog.worker.dataprovider.mappers.SellerProductLinkPersistenceMapper;
 import com.vtex.catalog.worker.dataprovider.repository.ProductRepository;
 import com.vtex.catalog.worker.dataprovider.repository.SellerProductRepository;
 import com.vtex.catalog.worker.dataprovider.table.ProductTable;
+import com.vtex.catalog.worker.dataprovider.table.SellerProductTable;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.Optional;
@@ -31,8 +33,16 @@ class CatalogGatewayImplTest {
     @Mock
     private SellerProductRepository sellerProductRepository;
 
-    @InjectMocks
     private CatalogGatewayImpl gateway;
+
+    @BeforeEach
+    void setUp() {
+        gateway = new CatalogGatewayImpl(
+                productRepository,
+                sellerProductRepository,
+                new CatalogProductPersistenceMapper(),
+                new SellerProductLinkPersistenceMapper());
+    }
 
     @Test
     void givenExistingSku_whenFindOrCreateProduct_thenReturnsExistingMatch() {
@@ -101,12 +111,17 @@ class CatalogGatewayImplTest {
     void givenSellerLinkRequest_whenLinkSellerProduct_thenPersistsLink() {
         // Given
         var product = sampleProduct();
+        when(sellerProductRepository.save(any(SellerProductTable.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         // When
         gateway.linkSellerProduct(product.getSellerName(), product.getSellerProductId(), 30L);
 
         // Then
-        verify(sellerProductRepository).save(any());
+        var captor = ArgumentCaptor.forClass(SellerProductTable.class);
+        verify(sellerProductRepository).save(captor.capture());
+        assertEquals("MegaStore", captor.getValue().getSellerName());
+        assertEquals(30L, captor.getValue().getProductId());
     }
 
     @Test

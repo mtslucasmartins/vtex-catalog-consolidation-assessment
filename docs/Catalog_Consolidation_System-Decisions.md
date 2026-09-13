@@ -24,6 +24,14 @@ See also: [Catalog_Consolidation_System.md](Catalog_Consolidation_System.md) · 
 
 ---
 
+### A3 — Domain entities own mutations
+
+**Decision:** JPA `*Table` types are anemic mapping only; state transitions live on domain entities (`ProductIngestOutbox`, `ProductEntryInbox`, `CatalogProduct`, `SellerProductLink`). Gateways load domain → mutate → map → save via persistence mappers.
+
+**Rationale:** Keeps business rules out of infrastructure; mirrors the existing `IngestionHistory` pattern and makes lifecycle behavior unit-testable without Spring or JPA.
+
+---
+
 ## Ingestion
 
 ### I1 — Async `202 Accepted`

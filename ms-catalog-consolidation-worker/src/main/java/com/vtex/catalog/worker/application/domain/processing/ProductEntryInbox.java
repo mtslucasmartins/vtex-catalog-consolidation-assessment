@@ -1,17 +1,18 @@
 package com.vtex.catalog.worker.application.domain.processing;
 
+import com.vtex.catalog.worker.application.common.stereotypes.DomainEntity;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
+import lombok.Getter;
 import lombok.ToString;
 
 import java.time.Instant;
 
-@Data
-@Builder
+@Getter
+@Builder(toBuilder = true)
 @ToString
 @AllArgsConstructor
-public class ProductEntryInbox {
+public class ProductEntryInbox implements DomainEntity {
 
     private ProductEntryIdentifiers details;
 
@@ -27,6 +28,12 @@ public class ProductEntryInbox {
 
     public boolean isCompleted() {
         return status != null;
+    }
+
+    public void complete(ProductEntryStatus status, String reason) {
+        this.status = status;
+        this.reason = reason;
+        this.updatedAt = Instant.now();
     }
 
     public static ProductEntryInbox pending(

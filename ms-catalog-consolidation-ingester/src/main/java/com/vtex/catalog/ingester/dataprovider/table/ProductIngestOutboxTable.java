@@ -1,6 +1,5 @@
 package com.vtex.catalog.ingester.dataprovider.table;
 
-import com.vtex.catalog.ingester.application.domain.ingestion.IngestionId;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -12,7 +11,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
-import java.util.UUID;
 
 @Entity
 @Table(name = "product_ingest_outbox")
@@ -22,11 +20,6 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ProductIngestOutboxTable {
-
-    public static final String PENDING = "PENDING";
-    public static final String PROCESSING = "PROCESSING";
-    public static final String DISPATCHED = "DISPATCHED";
-    public static final String FAILED = "FAILED";
 
     @Id
     @Column(name = "id")
@@ -49,47 +42,4 @@ public class ProductIngestOutboxTable {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
-
-    public static ProductIngestOutboxTable pending(IngestionId ingestionId) {
-        var now = Instant.now();
-        return ProductIngestOutboxTable.builder()
-                .id(UUID.randomUUID().toString())
-                .ingestionId(ingestionId.getValue())
-                .status(PENDING)
-                .attempts(0)
-                .createdAt(now)
-                .updatedAt(now)
-                .build();
-    }
-
-    public void markProcessing() {
-        this.status = PROCESSING;
-        this.updatedAt = Instant.now();
-    }
-
-    public void registerFailure(String reason, int maxAttempts) {
-        this.attempts++;
-        this.failureReason = reason;
-        this.updatedAt = Instant.now();
-        if (this.attempts >= maxAttempts) {
-            this.status = FAILED;
-        } else {
-            this.status = PENDING;
-        }
-    }
-
-    public void markDispatched() {
-        this.status = DISPATCHED;
-        this.updatedAt = Instant.now();
-    }
-
-    public void markFailed(String reason) {
-        this.status = FAILED;
-        this.failureReason = reason;
-        this.updatedAt = Instant.now();
-    }
-
-    public boolean isFailed() {
-        return FAILED.equals(status);
-    }
 }

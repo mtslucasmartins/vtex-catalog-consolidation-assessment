@@ -34,6 +34,28 @@ class ProductEntryInboxPersistenceMapperTest {
     }
 
     @Test
+    void givenCompletedInbox_whenToEntity_thenMapsAllFields() {
+        // Given
+        var inbox = ProductEntryInbox.completed(
+                ProductEntryIdentifiers.from("ing-1:0", "ing-1"),
+                "megastore#samsung#phone",
+                ProductEntryStatus.CREATED,
+                "Consolidated as CREATED")
+                .toBuilder()
+                .createdAt(Instant.parse("2026-01-01T00:00:00Z"))
+                .updatedAt(Instant.parse("2026-01-02T00:00:00Z"))
+                .build();
+
+        // When
+        var entity = mapper.toEntity(inbox);
+
+        // Then
+        assertEquals(ProductEntryStatus.CREATED.name(), entity.getStatus());
+        assertEquals("Consolidated as CREATED", entity.getReason());
+        assertEquals(Instant.parse("2026-01-02T00:00:00Z"), entity.getUpdatedAt());
+    }
+
+    @Test
     void givenEntity_whenToDomain_thenMapsStatusAndTimestamps() {
         // Given
         var entity = ProductEntryInboxTable.builder()

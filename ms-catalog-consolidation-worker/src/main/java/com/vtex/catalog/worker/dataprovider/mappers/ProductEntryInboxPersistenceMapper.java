@@ -12,14 +12,23 @@ import java.time.Instant;
 public class ProductEntryInboxPersistenceMapper {
 
     public ProductEntryInboxTable toPendingEntity(ProductEntryInbox inbox) {
-        var identifiers = inbox.getDetails();
         var now = Instant.now();
+        return toEntity(inbox.toBuilder()
+                .createdAt(now)
+                .updatedAt(now)
+                .build());
+    }
+
+    public ProductEntryInboxTable toEntity(ProductEntryInbox inbox) {
+        var identifiers = inbox.getDetails();
         return ProductEntryInboxTable.builder()
                 .correlationId(identifiers.getCorrelationId())
                 .idempotencyKey(inbox.getIdempotencyKey())
                 .ingestionId(identifiers.getIngestionId())
-                .createdAt(now)
-                .updatedAt(now)
+                .status(inbox.getStatus() != null ? inbox.getStatus().name() : null)
+                .reason(inbox.getReason())
+                .createdAt(inbox.getCreatedAt())
+                .updatedAt(inbox.getUpdatedAt())
                 .build();
     }
 

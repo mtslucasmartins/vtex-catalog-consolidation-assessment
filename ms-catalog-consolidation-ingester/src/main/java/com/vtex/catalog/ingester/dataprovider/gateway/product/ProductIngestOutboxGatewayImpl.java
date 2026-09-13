@@ -2,9 +2,10 @@ package com.vtex.catalog.ingester.dataprovider.gateway.product;
 
 import com.vtex.catalog.ingester.application.domain.ingestion.IngestionDispatchStatus;
 import com.vtex.catalog.ingester.application.domain.ingestion.IngestionId;
+import com.vtex.catalog.ingester.application.domain.ingestion.ProductIngestOutbox;
 import com.vtex.catalog.ingester.application.gateway.product.ProductIngestOutboxGateway;
+import com.vtex.catalog.ingester.dataprovider.mappers.ProductIngestOutboxPersistenceMapper;
 import com.vtex.catalog.ingester.dataprovider.repository.ProductIngestOutboxRepository;
-import com.vtex.catalog.ingester.dataprovider.table.ProductIngestOutboxTable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,22 +19,22 @@ public class ProductIngestOutboxGatewayImpl implements ProductIngestOutboxGatewa
 
     private final ProductIngestOutboxRepository repository;
 
+    private final ProductIngestOutboxPersistenceMapper mapper;
+
     @Override
     @Transactional
     public void enqueue(IngestionId ingestionId) {
-        repository.save(ProductIngestOutboxTable.pending(ingestionId));
+        repository.save(mapper.toEntity(ProductIngestOutbox.pending(ingestionId)));
     }
 
     @Override
     public Optional<IngestionDispatchStatus> findStatusByIngestionId(IngestionId ingestionId) {
-        return repository.findByIngestionId(ingestionId.getValue())
-                .map(row -> IngestionDispatchStatus.valueOf(row.getStatus()));
+        return findOutbox(ingestionId).map(ProductIngestOutbox::getStatus);
     }
 
     @Override
     public Optional<String> findFailureReasonByIngestionId(IngestionId ingestionId) {
-        return repository.findByIngestionId(ingestionId.getValue())
-                .map(ProductIngestOutboxTable::getFailureReason);
+        return findOutbox(ingestionId).map(ProductIngestOutbox::getFailureReason);
     }
 
     @Override
@@ -45,21 +46,23 @@ public class ProductIngestOutboxGatewayImpl implements ProductIngestOutboxGatewa
 
     @Override
     public boolean isDispatchable(IngestionId ingestionId) {
-        return findStatusByIngestionId(ingestionId)
-                .map(status -> status == IngestionDispatchStatus.PENDING
-                        || status == IngestionDispatchStatus.PROCESSING)
+        return findOutbox(ingestionId)
+                .map(ProductIngestOutbox::isDispatchable)
                 .orElse(false);
     }
 
     @Override
     @Transactional
     public List<IngestionId> claimPending(int batchSize) {
-        var rows = repository.findPendingForUpdate(batchSize);
-        if (rows.isEmpty()) {
+        var claimed = repository.findPendingForUpdate(batchSize).stream()
+                .map(mapper::toDomain)
+                .peek(ProductIngestOutbox::claimForProcessing)
+                .map(mapper::toEntity)
+                .toList();
+        if (claimed.isEmpty()) {
             return List.of();
         }
-        rows.forEach(ProductIngestOutboxTable::markProcessing);
-        return repository.saveAll(rows).stream()
+        return repository.saveAll(claimed).stream()
                 .map(row -> IngestionId.of(row.getIngestionId()))
                 .toList();
     }
@@ -67,29 +70,33 @@ public class ProductIngestOutboxGatewayImpl implements ProductIngestOutboxGatewa
     @Override
     @Transactional
     public void registerFailure(IngestionId ingestionId, String reason, int maxAttempts) {
-        var row = requireRow(ingestionId);
-        row.registerFailure(reason, maxAttempts);
-        repository.save(row);
+        var outbox = requireOutbox(ingestionId);
+        outbox.registerFailure(reason, maxAttempts);
+        repository.save(mapper.toEntity(outbox));
     }
 
     @Override
     @Transactional
     public void markDispatched(IngestionId ingestionId) {
-        var row = requireRow(ingestionId);
-        row.markDispatched();
-        repository.save(row);
+        var outbox = requireOutbox(ingestionId);
+        outbox.markDispatched();
+        repository.save(mapper.toEntity(outbox));
     }
 
     @Override
     @Transactional
     public void markFailed(IngestionId ingestionId, String reason) {
-        var row = requireRow(ingestionId);
-        row.markFailed(reason);
-        repository.save(row);
+        var outbox = requireOutbox(ingestionId);
+        outbox.markFailed(reason);
+        repository.save(mapper.toEntity(outbox));
     }
 
-    private ProductIngestOutboxTable requireRow(IngestionId ingestionId) {
-        return repository.findByIngestionId(ingestionId.getValue())
+    private Optional<ProductIngestOutbox> findOutbox(IngestionId ingestionId) {
+        return repository.findByIngestionId(ingestionId.getValue()).map(mapper::toDomain);
+    }
+
+    private ProductIngestOutbox requireOutbox(IngestionId ingestionId) {
+        return findOutbox(ingestionId)
                 .orElseThrow(() -> new IllegalStateException("Outbox row not found for ingestion " + ingestionId));
     }
 }

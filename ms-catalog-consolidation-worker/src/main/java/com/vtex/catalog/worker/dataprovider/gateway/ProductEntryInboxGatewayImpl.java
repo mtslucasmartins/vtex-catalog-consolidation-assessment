@@ -10,7 +10,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.Optional;
 
 @Component
@@ -44,12 +43,11 @@ public class ProductEntryInboxGatewayImpl implements ProductEntryInboxGateway {
     @Override
     @Transactional
     public ProductEntryInbox complete(String correlationId, ProductEntryStatus status, String reason) {
-        var entity = repository.findById(correlationId)
+        var inbox = repository.findById(correlationId)
+                .map(mapper::toDomain)
                 .orElseThrow(() -> new IllegalStateException("Inbox row not found: " + correlationId));
-        entity.setStatus(status.name());
-        entity.setReason(reason);
-        entity.setUpdatedAt(Instant.now());
-        return mapper.toDomain(repository.save(entity));
+        inbox.complete(status, reason);
+        return mapper.toDomain(repository.save(mapper.toEntity(inbox)));
     }
 
     private Optional<ProductEntryInbox> findExisting(ProductEntryInbox inbox) {

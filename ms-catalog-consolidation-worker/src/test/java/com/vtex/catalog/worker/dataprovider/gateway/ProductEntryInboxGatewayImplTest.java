@@ -97,7 +97,7 @@ class ProductEntryInboxGatewayImplTest {
                 .updatedAt(Instant.parse("2026-01-01T00:00:00Z"))
                 .build();
         when(repository.findById(CORRELATION_ID)).thenReturn(Optional.of(entity));
-        when(repository.save(entity)).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(ProductEntryInboxTable.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         // When
         var completed = gateway.complete(CORRELATION_ID, ProductEntryStatus.CREATED, "Consolidated as CREATED");
