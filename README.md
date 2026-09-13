@@ -17,30 +17,62 @@ Two Spring Boot services share Postgres and communicate through Kafka (Redpanda)
 | `ms-catalog-consolidation-ingester` | Receives the file, stores it in S3, enqueues async dispatch via outbox, streams the file and publishes one Kafka event per product |
 | `ms-catalog-consolidation-worker` | Consumes product-entry events, matches or creates catalog products, links sellers, records outcomes in an inbox |
 
-```text
-  {seller JSON file}
-         |
-         v
-    +----------+     S3          +------------------+
-    | ingester | ------------> | stored file      |
-    | (upload) |               | (key = ingest id)|
-    +----------+               +------------------+
-         |
-         |  ingestion_history + product_ingest_outbox (same transaction)
-         v
-    +----------+     relay      +---------------------------+
-    | ingester | ------------> | stream file, publish Kafka |
-    | (dispatch)|               | (1 event / product)       |
-    +----------+               +---------------------------+
-                                        |
-                                        v
-                              catalog.product-entry.update
-                                        |
-                                        v
-                                   +--------+
-                                   | worker | --> products + products_sellers
-                                   +--------+     product_entry_inbox
+### Ingester (`ms-catalog-consolidation-ingester`)
+
+```mermaid
+C4Container
+    title Catalog Ingester
+
+    Person(client, "Client", "Uploads seller JSON catalog")
+
+    Container_Boundary(ingester, "ms-catalog-consolidation-ingester") {
+        Container(api, "REST API", "Spring Web", "POST upload, GET status")
+        Container(receive, "Receive", "IngestFileUseCase", "Store file, enqueue outbox")
+        Container(relay, "Outbox relay", "Scheduler", "Claim PENDING rows")
+        Container(dispatch, "Dispatch", "ProductIngestUseCase", "Stream file, publish events")
+    }
+
+    ContainerDb(db, "Postgres", "ingestion_history, product_ingest_outbox")
+    Container_Ext(s3, "Object storage", "S3", "Raw file, key = ingestion id")
+    Container_Ext(kafka, "Message broker", "Kafka", "catalog.product-entry.update")
+
+    Rel(client, api, "POST /api/v1/ingestions", "HTTPS")
+    Rel(client, api, "GET /api/v1/ingestions/id", "HTTPS")
+    Rel(api, receive, "202 Accepted")
+    Rel(receive, s3, "Put object")
+    Rel(receive, db, "TX history + outbox PENDING")
+    Rel(relay, db, "FOR UPDATE SKIP LOCKED")
+    Rel(relay, dispatch, "Trigger")
+    Rel(dispatch, s3, "Stream JSON array")
+    Rel(dispatch, kafka, "One message per product")
+    Rel(dispatch, db, "Outbox DISPATCHED or FAILED")
 ```
+
+### Worker (`ms-catalog-consolidation-worker`)
+
+```mermaid
+C4Container
+    title Catalog Worker
+
+    Container_Boundary(worker, "ms-catalog-consolidation-worker") {
+        Container(consumer, "Event consumer", "Spring Kafka", "catalog.product-entry.update")
+        Container(orchestrator, "ProductEntryUseCase", "Use case", "Lock, inbox, orchestrate")
+        Container(chain, "Handler chain", "Domain", "Validate, Upsert, Link")
+    }
+
+    Container_Ext(kafka, "Message broker", "Kafka", "Product entry events")
+    ContainerDb(db, "Postgres", "products, products_sellers, product_entry_inbox")
+    Container_Ext(redis, "Redis", "Distributed lock", "Scope seller plus SKU")
+
+    Rel(kafka, consumer, "Deliver event")
+    Rel(consumer, orchestrator, "ProductEntryCommand")
+    Rel(orchestrator, redis, "Acquire and release lock")
+    Rel(orchestrator, db, "Claim and complete inbox")
+    Rel(orchestrator, chain, "Execute")
+    Rel(chain, db, "Match or create product, link seller")
+```
+
+Full walkthrough: [docs/Catalog_Consolidation_System.md](docs/Catalog_Consolidation_System.md).
 
 ## Quick start
 

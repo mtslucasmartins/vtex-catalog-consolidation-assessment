@@ -14,44 +14,63 @@ Matching uses a persisted **SKU** derived from canonical brand and name (see [Pr
 
 ---
 
-## System diagram
+## System diagrams
 
-The pipeline has two phases inside the **ingester** service (upload vs dispatch) and one **worker** phase (consolidation).
+C4 container views (render on GitHub via Mermaid). The ingester has two phases — **receive** and **dispatch** — inside one service; the worker consumes Kafka and writes the catalog.
+
+### Ingester
 
 ```mermaid
-flowchart LR
-  subgraph input [Input]
-    File["{...} seller JSON file"]
-  end
+C4Container
+    title Catalog Ingester
 
-  subgraph phase1 [Ingester — receive]
-    IngesterUpload[ingester]
-    S3[(S3)]
-    History[(ingestion_history)]
-    Outbox[(product_ingest_outbox)]
-  end
+    Person(client, "Client", "Uploads seller JSON catalog")
 
-  subgraph phase2 [Ingester — dispatch]
-    Relay[relay]
-    IngesterDispatch[ingester]
-    Kafka[[Kafka topic\ncatalog.product-entry.update]]
-  end
+    Container_Boundary(ingester, "ms-catalog-consolidation-ingester") {
+        Container(api, "REST API", "Spring Web", "POST upload, GET status")
+        Container(receive, "Receive", "IngestFileUseCase", "Store file, enqueue outbox")
+        Container(relay, "Outbox relay", "Scheduler", "Claim PENDING rows")
+        Container(dispatch, "Dispatch", "ProductIngestUseCase", "Stream file, publish events")
+    }
 
-  subgraph phase3 [Worker]
-    Worker[worker]
-    Catalog[(Postgres\ncatalog)]
-  end
+    ContainerDb(db, "Postgres", "ingestion_history, product_ingest_outbox")
+    Container_Ext(s3, "Object storage", "S3", "Raw file, key = ingestion id")
+    Container_Ext(kafka, "Message broker", "Kafka", "catalog.product-entry.update")
 
-  File --> IngesterUpload
-  IngesterUpload --> S3
-  IngesterUpload --> History
-  IngesterUpload --> Outbox
-  Outbox --> Relay
-  Relay --> IngesterDispatch
-  IngesterDispatch --> S3
-  IngesterDispatch --> Kafka
-  Kafka -.->|one event per product| Worker
-  Worker --> Catalog
+    Rel(client, api, "POST /api/v1/ingestions", "HTTPS")
+    Rel(client, api, "GET /api/v1/ingestions/id", "HTTPS")
+    Rel(api, receive, "202 Accepted")
+    Rel(receive, s3, "Put object")
+    Rel(receive, db, "TX history + outbox PENDING")
+    Rel(relay, db, "FOR UPDATE SKIP LOCKED")
+    Rel(relay, dispatch, "Trigger")
+    Rel(dispatch, s3, "Stream JSON array")
+    Rel(dispatch, kafka, "One message per product")
+    Rel(dispatch, db, "Outbox DISPATCHED or FAILED")
+```
+
+### Worker
+
+```mermaid
+C4Container
+    title Catalog Worker
+
+    Container_Boundary(worker, "ms-catalog-consolidation-worker") {
+        Container(consumer, "Event consumer", "Spring Kafka", "catalog.product-entry.update")
+        Container(orchestrator, "ProductEntryUseCase", "Use case", "Lock, inbox, orchestrate")
+        Container(chain, "Handler chain", "Domain", "Validate, Upsert, Link")
+    }
+
+    Container_Ext(kafka, "Message broker", "Kafka", "Product entry events")
+    ContainerDb(db, "Postgres", "products, products_sellers, product_entry_inbox")
+    Container_Ext(redis, "Redis", "Distributed lock", "Scope seller plus SKU")
+
+    Rel(kafka, consumer, "Deliver event")
+    Rel(consumer, orchestrator, "ProductEntryCommand")
+    Rel(orchestrator, redis, "Acquire and release lock")
+    Rel(orchestrator, db, "Claim and complete inbox")
+    Rel(orchestrator, chain, "Execute")
+    Rel(chain, db, "Match or create product, link seller")
 ```
 
 ### Phase 1 — Receive the file
@@ -110,20 +129,6 @@ On invalid JSON the outbox row is marked **`FAILED`** (non-retryable). Transient
 | 3 | **Worker** | Claim **product_entry_inbox** row (`status` null while processing) |
 | 4 | **Worker** | Run handler chain (validate → upsert → link) |
 | 5 | **Worker** | Complete inbox with status + reason, release lock |
-
-```text
-  Kafka event
-       |
-       v
-  +------------------+
-  | ProductEntry     |
-  | UseCase          |
-  +------------------+
-       |
-       +--> Redis lock (per product identity)
-       +--> product_entry_inbox (per correlationId)
-       +--> products / products_sellers tables
-```
 
 There is **no callback** from worker to ingester. Poll upload status via the outbox; inspect consolidation via `product_entry_inbox`.
 
