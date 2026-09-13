@@ -65,7 +65,7 @@ public class ProductEntryUseCase implements UseCase<ProductEntryCommand, Product
                 }
 
                 productEntryInboxGateway.complete(identifiers.getCorrelationId(), status, reason);
-                recordProcessed(startedAt, status);
+                recordProcessed(startedAt, status, identifiers.getIngestionId());
                 return status;
             } finally {
                 lock.unlock();
@@ -77,8 +77,10 @@ public class ProductEntryUseCase implements UseCase<ProductEntryCommand, Product
         }
     }
 
-    private void recordProcessed(long startedAt, ProductEntryStatus status) {
-        meterRegistry.counter(PRODUCT_ENTRIES_PROCESSED, "status", status.name()).increment();
+    private void recordProcessed(long startedAt, ProductEntryStatus status, String ingestionId) {
+        meterRegistry.counter(PRODUCT_ENTRIES_PROCESSED,
+                "status", status.name(),
+                "ingestion_id", ingestionId).increment();
         recordHandled("processed");
         recordProcessingTime(startedAt, status, "processed");
     }

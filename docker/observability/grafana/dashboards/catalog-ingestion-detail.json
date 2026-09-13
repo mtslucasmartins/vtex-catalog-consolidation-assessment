@@ -1,0 +1,123 @@
+{
+  "annotations": {"list": []},
+  "description": "Per-ingestion breakdown of catalog product entry outcomes (created, linked, rejected, already linked).",
+  "editable": true,
+  "graphTooltip": 2,
+  "links": [
+    {
+      "title": "Catalog Processing",
+      "type": "link",
+      "url": "/d/catalog-processing/catalog-processing",
+      "icon": "dashboard",
+      "targetBlank": false
+    }
+  ],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Ingestion Outcomes",
+      "description": "Final status counts for the selected ingestion job.",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Total Processed",
+      "description": "All first-time entries processed for this ingestion.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(catalog_product_entries_processed_total{ingestion_id=\"$ingestion_id\"}) or vector(0)", "instant": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1}
+    },
+    {
+      "type": "stat",
+      "title": "Created",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(catalog_product_entries_processed_total{ingestion_id=\"$ingestion_id\", status=\"CREATED\"}) or vector(0)", "instant": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "color": {"mode": "fixed", "fixedColor": "green"}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 6, "y": 1}
+    },
+    {
+      "type": "stat",
+      "title": "Linked",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(catalog_product_entries_processed_total{ingestion_id=\"$ingestion_id\", status=\"LINKED\"}) or vector(0)", "instant": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "color": {"mode": "fixed", "fixedColor": "blue"}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 10, "y": 1}
+    },
+    {
+      "type": "stat",
+      "title": "Rejected",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(catalog_product_entries_processed_total{ingestion_id=\"$ingestion_id\", status=\"REJECTED\"}) or vector(0)", "instant": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "color": {"mode": "fixed", "fixedColor": "red"}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 14, "y": 1}
+    },
+    {
+      "type": "stat",
+      "title": "Already Linked",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(catalog_product_entries_processed_total{ingestion_id=\"$ingestion_id\", status=\"ALREADY_LINKED\"}) or vector(0)", "instant": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "color": {"mode": "fixed", "fixedColor": "orange"}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 18, "y": 1}
+    },
+    {
+      "type": "piechart",
+      "title": "Status Mix",
+      "description": "Share of each outcome for the selected ingestion.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum by (status) (catalog_product_entries_processed_total{ingestion_id=\"$ingestion_id\"})", "instant": true, "legendFormat": "{{status}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]}, "pieType": "donut", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 5}
+    },
+    {
+      "type": "table",
+      "title": "Status Breakdown",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum by (status) (catalog_product_entries_processed_total{ingestion_id=\"$ingestion_id\"})", "format": "table", "instant": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []},
+      "options": {"cellHeight": "sm", "showHeader": true},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 5}
+    },
+    {
+      "type": "timeseries",
+      "title": "Processing Rate by Status",
+      "description": "Entries per second by outcome for the selected ingestion.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum by (status) (rate(catalog_product_entries_processed_total{ingestion_id=\"$ingestion_id\"}[$__rate_interval]))", "legendFormat": "{{status}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ops", "decimals": 2}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 5}
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 41,
+  "tags": ["catalog", "ingestion"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "definition": "label_values(catalog_product_entries_processed_total, ingestion_id)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Ingestion ID",
+        "multi": false,
+        "name": "ingestion_id",
+        "options": [],
+        "query": {"query": "label_values(catalog_product_entries_processed_total, ingestion_id)", "refId": "PrometheusVariableQuery"},
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {"from": "now-15m", "to": "now"},
+  "timezone": "browser",
+  "title": "Catalog Ingestion Detail",
+  "uid": "catalog-ingestion-detail",
+  "version": 1
+}

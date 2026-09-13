@@ -3,6 +3,15 @@
   "description": "Catalog ingestion, product processing, Kafka lag, and HTTP performance.",
   "editable": true,
   "graphTooltip": 2,
+  "links": [
+    {
+      "title": "Ingestion Detail",
+      "type": "link",
+      "url": "/d/catalog-ingestion-detail/catalog-ingestion-detail",
+      "icon": "dashboard",
+      "targetBlank": false
+    }
+  ],
   "panels": [
     {
       "type": "row",
@@ -58,6 +67,42 @@
       "gridPos": {"h": 1, "w": 24, "x": 0, "y": 6}
     },
     {
+      "type": "stat",
+      "title": "Created",
+      "description": "New catalog products plus seller links.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(catalog_product_entries_processed_total{status=\"CREATED\"}) or vector(0)", "instant": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "color": {"mode": "fixed", "fixedColor": "green"}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 7}
+    },
+    {
+      "type": "stat",
+      "title": "Linked",
+      "description": "Existing catalog products linked to a seller.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(catalog_product_entries_processed_total{status=\"LINKED\"}) or vector(0)", "instant": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "color": {"mode": "fixed", "fixedColor": "blue"}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 7}
+    },
+    {
+      "type": "stat",
+      "title": "Rejected",
+      "description": "Validation failures (e.g. invalid seller product UUID).",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(catalog_product_entries_processed_total{status=\"REJECTED\"}) or vector(0)", "instant": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "color": {"mode": "fixed", "fixedColor": "red"}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 7}
+    },
+    {
+      "type": "stat",
+      "title": "Already Linked",
+      "description": "Duplicate seller listings skipped by validation.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(catalog_product_entries_processed_total{status=\"ALREADY_LINKED\"}) or vector(0)", "instant": true, "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "color": {"mode": "fixed", "fixedColor": "orange"}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 7}
+    },
+    {
       "type": "table",
       "title": "Product Status Distribution",
       "description": "Exact processed totals by final status since the current worker started.",
@@ -65,7 +110,7 @@
       "targets": [{"expr": "sum by (status) (catalog_product_entries_processed_total)", "format": "table", "instant": true, "refId": "A"}],
       "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []},
       "options": {"cellHeight": "sm", "showHeader": true},
-      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 7}
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 11}
     },
     {
       "type": "timeseries",
@@ -78,7 +123,7 @@
       ],
       "fieldConfig": {"defaults": {"unit": "s", "custom": {"drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true}}, "overrides": []},
       "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean", "max"]}},
-      "gridPos": {"h": 8, "w": 16, "x": 8, "y": 7}
+      "gridPos": {"h": 8, "w": 16, "x": 8, "y": 11}
     },
     {
       "type": "row",
@@ -86,7 +131,7 @@
       "description": "Kafka publication, consumption, and backlog trends.",
       "collapsed": false,
       "panels": [],
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 15}
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 19}
     },
     {
       "type": "timeseries",
@@ -100,7 +145,7 @@
       ],
       "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "custom": {"drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true}}, "overrides": []},
       "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["sum", "max"]}},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20}
     },
     {
       "type": "timeseries",
@@ -110,7 +155,7 @@
       "targets": [{"expr": "clamp_min(sum(max by (redpanda_topic, redpanda_partition) (redpanda_kafka_max_offset{redpanda_topic=\"catalog.product-entry.update\"}) - on (redpanda_topic, redpanda_partition) max by (redpanda_topic, redpanda_partition) (redpanda_kafka_consumer_group_committed_offset{redpanda_group=\"catalog-workers\",redpanda_topic=\"catalog.product-entry.update\"})), 0)", "legendFormat": "Messages", "refId": "A"}],
       "fieldConfig": {"defaults": {"decimals": 0, "custom": {"drawStyle": "line", "lineInterpolation": "stepAfter", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true}}, "overrides": []},
       "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean", "max"]}},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20}
     },
     {
       "type": "row",
@@ -118,7 +163,7 @@
       "description": "Ingester API traffic, latency, and error trends.",
       "collapsed": false,
       "panels": [],
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 24}
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 28}
     },
     {
       "type": "timeseries",
@@ -128,7 +173,7 @@
       "targets": [{"expr": "sum by (method, uri) (rate(http_server_requests_seconds_count{job=\"ingester\",uri!~\"/actuator.*\"}[$__rate_interval])) or 0 * sum by (method, uri) (count_over_time(http_server_requests_seconds_count{job=\"ingester\",uri!~\"/actuator.*\"}[$__range]))", "legendFormat": "{{method}} {{uri}}", "refId": "A"}],
       "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true}}, "overrides": []},
       "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean", "max"]}},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 25}
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 29}
     },
     {
       "type": "timeseries",
@@ -141,7 +186,7 @@
       ],
       "fieldConfig": {"defaults": {"unit": "s", "custom": {"drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true}}, "overrides": []},
       "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean", "max"]}},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 25}
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 29}
     },
     {
       "type": "timeseries",
@@ -155,7 +200,7 @@
       ],
       "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "custom": {"drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true}}, "overrides": []},
       "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "mean", "max"]}},
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 33}
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 37}
     },
     {
       "type": "row",
@@ -163,7 +208,7 @@
       "description": "Failures outside the HTTP request path.",
       "collapsed": false,
       "panels": [],
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 41}
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 45}
     },
     {
       "type": "timeseries",
@@ -176,7 +221,7 @@
       ],
       "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "custom": {"drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true}}, "overrides": []},
       "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["sum", "max"]}},
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 42}
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 46}
     }
   ],
   "refresh": "5s",
@@ -186,5 +231,5 @@
   "timezone": "browser",
   "title": "Catalog Processing",
   "uid": "catalog-processing",
-  "version": 5
+  "version": 6
 }

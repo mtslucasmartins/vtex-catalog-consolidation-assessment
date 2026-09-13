@@ -10,8 +10,20 @@ scrape_configs:
 
   - job_name: worker
     metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: [ms-catalog-consolidation-worker:9091]
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        port: 9091
+        filters:
+          - name: label
+            values:
+              - com.docker.compose.service=ms-catalog-consolidation-worker
+    relabel_configs:
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        regex: ms-catalog-consolidation-worker
+        action: keep
+      - source_labels: [__meta_docker_container_name]
+        regex: /(.*)
+        target_label: instance
 
   - job_name: redpanda
     metrics_path: /public_metrics
