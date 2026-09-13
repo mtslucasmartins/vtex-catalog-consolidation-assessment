@@ -1,11 +1,8 @@
 package com.vtex.catalog.worker.application.gateway;
 
+import java.util.concurrent.locks.Lock;
+
 public interface DistributedLockGateway {
 
-    DistributedLock acquire(String resourceKey);
-
-    void release(DistributedLock lock);
-
-    record DistributedLock(String resourceKey, String token) {
-    }
+    Lock acquire(String resourceKey);
 }

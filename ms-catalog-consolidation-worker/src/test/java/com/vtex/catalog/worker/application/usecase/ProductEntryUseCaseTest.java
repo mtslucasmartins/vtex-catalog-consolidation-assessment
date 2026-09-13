@@ -19,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
+import java.util.concurrent.locks.Lock;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -46,6 +47,9 @@ class ProductEntryUseCaseTest {
     @Mock
     private DistributedLockGateway lockGateway;
 
+    @Mock
+    private Lock lock;
+
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     private ProductEntryUseCase useCase;
@@ -53,8 +57,6 @@ class ProductEntryUseCaseTest {
     private ProductEntryCommand command;
 
     private ProductEntryPayload product;
-
-    private DistributedLockGateway.DistributedLock lock;
 
     @BeforeEach
     void setUp() {
@@ -69,7 +71,6 @@ class ProductEntryUseCaseTest {
         command = ProductEntryCommand.from(
                 ProductEntryIdentifiers.from(CORRELATION_ID, INGESTION_ID),
                 product);
-        lock = new DistributedLockGateway.DistributedLock(IDEMPOTENCY_KEY, "token");
     }
 
     @Test
@@ -96,7 +97,7 @@ class ProductEntryUseCaseTest {
         order.verify(inboxGateway).claim(any(ProductEntryInbox.class));
         order.verify(chainExecutor).execute(product);
         order.verify(inboxGateway).complete(CORRELATION_ID, ProductEntryStatus.LINKED, "Consolidated as LINKED");
-        verify(lockGateway).release(lock);
+        verify(lock).unlock();
     }
 
     @Test
@@ -118,7 +119,7 @@ class ProductEntryUseCaseTest {
         verify(inboxGateway, never()).claim(any());
         verify(chainExecutor, never()).execute(any());
         verify(inboxGateway, never()).complete(any(), any(), any());
-        verify(lockGateway).release(lock);
+        verify(lock).unlock();
     }
 
     @Test

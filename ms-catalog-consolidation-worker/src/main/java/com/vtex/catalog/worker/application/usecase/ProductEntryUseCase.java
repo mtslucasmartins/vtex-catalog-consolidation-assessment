@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
 
 import static com.vtex.catalog.worker.application.common.metrics.MetricNames.PRODUCT_ENTRIES_PROCESSED;
 import static com.vtex.catalog.worker.application.common.metrics.MetricNames.PRODUCT_ENTRY_HANDLED;
@@ -40,7 +41,7 @@ public class ProductEntryUseCase implements UseCase<ProductEntryCommand, Product
         var idempotencyKey = ProductEntryIdempotencyKey.from(command.getProduct());
 
         try {
-            var lock = lockGateway.acquire(idempotencyKey);
+            Lock lock = lockGateway.acquire(idempotencyKey);
 
             try {
                 var existing = productEntryInboxGateway.findByCorrelationId(identifiers.getCorrelationId());
@@ -67,7 +68,7 @@ public class ProductEntryUseCase implements UseCase<ProductEntryCommand, Product
                 recordProcessed(startedAt, status);
                 return status;
             } finally {
-                lockGateway.release(lock);
+                lock.unlock();
             }
         } catch (RuntimeException exception) {
             recordHandled("error");

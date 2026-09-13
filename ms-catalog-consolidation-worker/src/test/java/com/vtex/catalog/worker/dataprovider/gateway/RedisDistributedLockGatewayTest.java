@@ -7,18 +7,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.integration.redis.util.RedisLockRegistry;
 
-import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -26,11 +21,13 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class RedisDistributedLockGatewayTest {
 
-    @Mock
-    private StringRedisTemplate redisTemplate;
+    private static final String RESOURCE_KEY = "megastore#samsung#phone";
 
     @Mock
-    private ValueOperations<String, String> valueOperations;
+    private RedisLockRegistry lockRegistry;
+
+    @Mock
+    private Lock lock;
 
     private RedisDistributedLockGateway gateway;
 
@@ -40,43 +37,29 @@ class RedisDistributedLockGatewayTest {
         properties.getLock().setAcquireMaxAttempts(2);
         properties.getLock().setAcquireRetryDelayMs(1);
         properties.getLock().setProductEntryTtlMs(1000);
-        gateway = new RedisDistributedLockGateway(redisTemplate, properties);
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        gateway = new RedisDistributedLockGateway(lockRegistry, properties);
+        when(lockRegistry.obtain(RESOURCE_KEY)).thenReturn(lock);
     }
 
     @Test
-    void givenFreeLock_whenAcquire_thenReturnsLock() {
+    void givenFreeLock_whenAcquire_thenReturnsSameLockInstance() throws InterruptedException {
         // Given
-        when(valueOperations.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
+        when(lock.tryLock(0, TimeUnit.MILLISECONDS)).thenReturn(true);
 
         // When
-        var lock = gateway.acquire("megastore#samsung#phone");
+        var acquired = gateway.acquire(RESOURCE_KEY);
 
         // Then
-        assertNotNull(lock);
-        assertEquals("megastore#samsung#phone", lock.resourceKey());
+        assertSame(lock, acquired);
     }
 
     @Test
-    void givenBusyLock_whenAcquireExhaustsRetries_thenThrowsLockNotAcquiredException() {
+    void givenBusyLock_whenAcquireExhaustsRetries_thenThrowsLockNotAcquiredException() throws InterruptedException {
         // Given
-        when(valueOperations.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(false);
+        when(lock.tryLock(0, TimeUnit.MILLISECONDS)).thenReturn(false);
 
         // When / Then
-        assertThrows(LockNotAcquiredException.class, () -> gateway.acquire("megastore#samsung#phone"));
-        verify(valueOperations, atLeastOnce()).setIfAbsent(anyString(), anyString(), any(Duration.class));
-    }
-
-    @Test
-    void givenHeldLock_whenRelease_thenExecutesUnlockScript() {
-        // Given
-        when(valueOperations.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
-        var lock = gateway.acquire("megastore#samsung#phone");
-
-        // When
-        gateway.release(lock);
-
-        // Then
-        verify(redisTemplate).execute(any(), anyList(), eq(lock.token()));
+        assertThrows(LockNotAcquiredException.class, () -> gateway.acquire(RESOURCE_KEY));
+        verify(lock, atLeastOnce()).tryLock(0, TimeUnit.MILLISECONDS);
     }
 }
